@@ -710,3 +710,12 @@ supported:
   - _weight_norm_interface
   - _weight_norm_interface_backward
   - range.out
+  - _histogramdd_from_bin_cts
+  - _histogramdd_from_bin_cts.out
+  - _histogramdd_from_bin_tensors
+  - _histogramdd_from_bin_tensors.out
+  - _histogramdd_bin_edges
+  - _histogramdd_bin_edges.out
+  - histogramdd
+  - histogramdd.int_bins
+  - histogramdd.TensorList_bins
