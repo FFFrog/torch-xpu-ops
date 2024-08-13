@@ -343,15 +343,7 @@ std::vector<Tensor> XPUNativeFunctions::_histogramdd_bin_edges(
     std::optional<c10::ArrayRef<double>> range,
     const std::optional<Tensor>& weight,
     bool density) {
-  std::vector<Tensor> bin_edges_out = allocate_bin_edges_tensors(self);
-  std::vector<Tensor> bins =
-      histogramdd_bin_edges(self, bin_ct, range, weight, density);
-
-  histogramdd_bin_edges_out(self, bin_ct, range, weight, density, bins);
-  for (const auto dim : c10::irange(bins.size())) {
-    bin_edges_out[dim].copy_(bins[dim]);
-  }
-  return bin_edges_out;
+  return histogramdd_bin_edges(self, bin_ct, range, weight, density);
 }
 
 static Tensor& histogramdd_out(

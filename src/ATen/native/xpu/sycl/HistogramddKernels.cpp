@@ -207,11 +207,17 @@ void histogramdd_kernel(
 
   AT_DISPATCH_FLOATING_TYPES_AND2(
       kBFloat16, kHalf, self.scalar_type(), "histogram_xpu", [&]() {
-        Tensor bin_edges_contig_ptr =
-            at::empty({N}, self.options().dtype(c10::kUInt64).device(at::kCPU));
+        Tensor self_contig = self.contiguous();
+
+        const auto weight_contig = weight.has_value()
+            ? std::optional<Tensor>(weight->contiguous())
+            : std::optional<Tensor>();
+
+        Tensor bin_edges_contig_ptr = at::empty(
+            {N}, self_contig.options().dtype(c10::kUInt64).device(at::kCPU));
         Tensor num_bin_edges = at::empty(
             bin_edges_contig_ptr.sizes(),
-            self.options().dtype(c10::kLong).device(at::kCPU));
+            self_contig.options().dtype(c10::kLong).device(at::kCPU));
 
         auto bin_edges_contig_ptr_accessor =
             bin_edges_contig_ptr.generic_packed_accessor<uint64_t, 1>();
@@ -226,16 +232,17 @@ void histogramdd_kernel(
         }
 
         const Tensor bin_edges_contig_ptr_xpu =
-            bin_edges_contig_ptr.to(self.device()).contiguous();
+            bin_edges_contig_ptr.to(self_contig.device()).contiguous();
         const Tensor num_bin_edges_xpu =
-            num_bin_edges.to(self.device()).contiguous();
+            num_bin_edges.to(self_contig.device()).contiguous();
 
         histogramdd_template<scalar_t>(
-            self.data_ptr<scalar_t>(),
+            self_contig.data_ptr<scalar_t>(),
             reinterpret_cast<const scalar_t* const*>(
                 bin_edges_contig_ptr_xpu.const_data_ptr()),
             hist.data_ptr<scalar_t>(),
-            weight.has_value() ? weight->data_ptr<scalar_t>() : nullptr,
+            weight_contig.has_value() ? weight_contig->data_ptr<scalar_t>()
+                                      : nullptr,
             M,
             N,
             num_bin_edges_xpu.const_data_ptr<int64_t>());
@@ -272,27 +279,44 @@ void histogramdd_linear_kernel(
     const TensorList& bin_edges,
     const std::pair<std::vector<double>, std::vector<double>>&
         outer_bin_edges) {
-  // histogramdd_kernel(self, weight, density, hist, bin_edges);
-  // return;
   globalContext().alertNotDeterministic("histogramdd_linear_kernel_xpu");
   hist.fill_(0);
 
+  TORCH_INTERNAL_ASSERT(self.dim() == 2);
+
   const int64_t M = self.size(0);
   const int64_t N = self.size(1);
+  if (weight.has_value()) {
+    TORCH_INTERNAL_ASSERT(
+        weight.value().dim() == 1 && weight.value().numel() == M);
+  }
+
+  const int64_t D = self.size(1);
+  TORCH_INTERNAL_ASSERT(int64_t(bin_edges.size()) == D);
+  for (const auto dim : c10::irange(D)) {
+    TORCH_INTERNAL_ASSERT(bin_edges[dim].is_contiguous());
+    TORCH_INTERNAL_ASSERT(hist.size(dim) + 1 == bin_edges[dim].numel());
+  }
+
+  if (D == 0) {
+    // hist is an empty tensor in this case; nothing to do here
+    return;
+  }
 
   AT_DISPATCH_FLOATING_TYPES_AND2(
       kBFloat16, kHalf, self.scalar_type(), "histogram_linear_xpu", [&]() {
-        const int64_t D = self.size(1);
-        if (D == 0) {
-          // hist is an empty tensor in this case; nothing to do here
-          return;
-        }
+        Tensor self_contig = self.contiguous();
 
-        Tensor num_bin_edges =
-            at::empty({D}, self.options().dtype(c10::kLong).device(at::kCPU));
-        Tensor leftmost_edges = at::empty({D}, self.options().device(at::kCPU));
+        const auto weight_contig = weight.has_value()
+            ? std::optional<Tensor>(weight->contiguous())
+            : std::optional<Tensor>();
+
+        Tensor num_bin_edges = at::empty(
+            {D}, self_contig.options().dtype(c10::kLong).device(at::kCPU));
+        Tensor leftmost_edges =
+            at::empty({D}, self_contig.options().device(at::kCPU));
         Tensor rightmost_edges =
-            at::empty({D}, self.options().device(at::kCPU));
+            at::empty({D}, self_contig.options().device(at::kCPU));
 
         auto num_bin_edges_accessor =
             num_bin_edges.generic_packed_accessor<int64_t, 1>();
@@ -308,16 +332,17 @@ void histogramdd_linear_kernel(
         }
 
         const Tensor num_bin_edges_xpu =
-            num_bin_edges.to(self.device()).contiguous();
+            num_bin_edges.to(self_contig.device()).contiguous();
         const Tensor leftmost_edges_xpu =
-            leftmost_edges.to(self.device()).contiguous();
+            leftmost_edges.to(self_contig.device()).contiguous();
         const Tensor rightmost_edges_xpu =
-            rightmost_edges.to(self.device()).contiguous();
+            rightmost_edges.to(self_contig.device()).contiguous();
 
         histogramdd_linear_template<scalar_t>(
-            self.data_ptr<scalar_t>(),
+            self_contig.data_ptr<scalar_t>(),
             hist.data_ptr<scalar_t>(),
-            weight.has_value() ? weight->data_ptr<scalar_t>() : nullptr,
+            weight_contig.has_value() ? weight_contig->data_ptr<scalar_t>()
+                                      : nullptr,
             M,
             N,
             num_bin_edges_xpu.const_data_ptr<int64_t>(),
