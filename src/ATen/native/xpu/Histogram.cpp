@@ -283,18 +283,6 @@ Tensor XPUNativeFunctions::_histogramdd_from_bin_tensors(
     const std::optional<Tensor>& weight,
     bool density) {
   Tensor hist = at::empty({0}, self.options(), MemoryFormat::Contiguous);
-  XPUNativeFunctions::_histogramdd_from_bin_tensors_out(
-      self, bins, weight, density, hist);
-  return hist;
-}
-
-Tensor& XPUNativeFunctions::_histogramdd_from_bin_tensors_out(
-    const Tensor& self,
-    TensorList bins,
-    const std::optional<Tensor>& weight,
-    bool density,
-    Tensor& out) {
-  Tensor& hist = out;
   std::vector<Tensor> bin_edges_out = allocate_bin_edges_tensors(self);
   TensorList bin_edges_out_tl(bin_edges_out);
   histogramdd_out(self, bins, weight, density, hist, bin_edges_out_tl);
@@ -356,17 +344,6 @@ std::vector<Tensor> XPUNativeFunctions::_histogramdd_bin_edges(
     const std::optional<Tensor>& weight,
     bool density) {
   std::vector<Tensor> bin_edges_out = allocate_bin_edges_tensors(self);
-  return histogramdd_bin_edges_out(
-      self, bin_ct, range, weight, density, bin_edges_out);
-}
-
-void XPUNativeFunctions::_histogramdd_bin_edges_out(
-    const Tensor& self,
-    IntArrayRef bin_ct,
-    std::optional<c10::ArrayRef<double>> range,
-    const std::optional<Tensor>& weight,
-    bool density,
-    TensorList bin_edges_out) {
   std::vector<Tensor> bins =
       histogramdd_bin_edges(self, bin_ct, range, weight, density);
 
@@ -374,6 +351,7 @@ void XPUNativeFunctions::_histogramdd_bin_edges_out(
   for (const auto dim : c10::irange(bins.size())) {
     bin_edges_out[dim].copy_(bins[dim]);
   }
+  return bin_edges_out;
 }
 
 static Tensor& histogramdd_out(
@@ -426,19 +404,6 @@ Tensor XPUNativeFunctions::_histogramdd_from_bin_cts(
     const std::optional<Tensor>& weight,
     bool density) {
   Tensor hist = at::empty({0}, self.options(), MemoryFormat::Contiguous);
-  XPUNativeFunctions::_histogramdd_from_bin_cts_out(
-      self, bin_ct, range, weight, density, hist);
-  return hist;
-}
-
-Tensor& XPUNativeFunctions::_histogramdd_from_bin_cts_out(
-    const Tensor& self,
-    IntArrayRef bin_ct,
-    std::optional<c10::ArrayRef<double>> range,
-    const std::optional<Tensor>& weight,
-    bool density,
-    Tensor& out) {
-  Tensor& hist = out;
   std::vector<Tensor> bin_edges_out = allocate_bin_edges_tensors(self);
   TensorList bin_edges_out_tl(bin_edges_out);
   histogramdd_out(self, bin_ct, range, weight, density, hist, bin_edges_out_tl);
@@ -527,41 +492,6 @@ std::tuple<Tensor, Tensor> XPUNativeFunctions::histogram(
   Tensor bin_edges_out = at::empty({0}, self.options());
   return histogram_out(
       self, bin_ct, range, weight, density, hist, bin_edges_out);
-}
-
-std::tuple<Tensor, std::vector<Tensor>> XPUNativeFunctions::histogramdd(
-    const Tensor& self,
-    TensorList bins,
-    std::optional<ArrayRef<double>> /*range*/,
-    const std::optional<Tensor>& weight,
-    bool density) {
-  auto hist = XPUNativeFunctions::_histogramdd_from_bin_tensors(
-      self, bins, weight, density);
-  return std::tuple<Tensor, std::vector<Tensor>>{std::move(hist), bins.vec()};
-}
-
-std::tuple<Tensor, std::vector<Tensor>> XPUNativeFunctions::histogramdd(
-    const Tensor& self,
-    IntArrayRef bins,
-    std::optional<ArrayRef<double>> range,
-    const std::optional<Tensor>& weight,
-    bool density) {
-  auto bin_edges = XPUNativeFunctions::_histogramdd_bin_edges(
-      self, bins, range, weight, density);
-  auto hist = XPUNativeFunctions::_histogramdd_from_bin_cts(
-      self, bins, range, weight, density);
-  return std::tuple<Tensor, std::vector<Tensor>>{
-      std::move(hist), std::move(bin_edges)};
-}
-
-std::tuple<Tensor, std::vector<Tensor>> XPUNativeFunctions::histogramdd(
-    const Tensor& self,
-    int64_t bins,
-    std::optional<ArrayRef<double>> range,
-    const std::optional<Tensor>& weight,
-    bool density) {
-  DimVector bins_v(self.size(-1), bins);
-  return XPUNativeFunctions::histogramdd(self, bins_v, range, weight, density);
 }
 
 } // namespace at
