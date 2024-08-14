@@ -224,6 +224,42 @@ select_outer_bin_edges(
   return std::make_pair(leftmost_edges, rightmost_edges);
 }
 
+/* histc's version of the logic for outermost bin edges.
+ */
+static std::pair<double, double> histc_select_outer_bin_edges(
+    const Tensor& input,
+    const Scalar& min,
+    const Scalar& max) {
+  double leftmost_edge = min.to<double>();
+  double rightmost_edge = max.to<double>();
+
+  if (leftmost_edge == rightmost_edge && input.numel() > 0) {
+    auto extrema = aminmax(input);
+    leftmost_edge = std::get<0>(extrema).item<double>();
+    rightmost_edge = std::get<1>(extrema).item<double>();
+  }
+
+  if (leftmost_edge == rightmost_edge) {
+    leftmost_edge -= 1;
+    rightmost_edge += 1;
+  }
+
+  TORCH_CHECK(
+      !(std::isinf(leftmost_edge) || std::isinf(rightmost_edge) ||
+        std::isnan(leftmost_edge) || std::isnan(rightmost_edge)),
+      "torch.histc: range of [",
+      leftmost_edge,
+      ", ",
+      rightmost_edge,
+      "] is not finite");
+
+  TORCH_CHECK(
+      leftmost_edge < rightmost_edge,
+      "torch.histc: max must be larger than min");
+
+  return std::make_pair(leftmost_edge, rightmost_edge);
+}
+
 static std::vector<Tensor> allocate_bin_edges_tensors(const Tensor& self) {
   TORCH_CHECK(
       self.dim() >= 2,
@@ -484,6 +520,48 @@ std::tuple<Tensor, Tensor> XPUNativeFunctions::histogram(
   Tensor bin_edges_out = at::empty({0}, self.options());
   return histogram_out(
       self, bin_ct, range, weight, density, hist, bin_edges_out);
+}
+
+/* Narrowed interface for the legacy torch.histc function.
+ */
+Tensor& XPUNativeFunctions::histc_out(
+    const Tensor& self,
+    int64_t bin_ct,
+    const Scalar& min,
+    const Scalar& max,
+    Tensor& hist) {
+  Tensor bin_edges = at::empty({0}, self.options());
+
+  Tensor reshaped_self = self.reshape({self.numel(), 1});
+  TensorList bins_in = bin_edges;
+  TensorList bins_out = bin_edges;
+
+  histogramdd_prepare_out(
+      reshaped_self, std::vector<int64_t>{bin_ct}, hist, bins_out);
+
+  auto outer_bin_edges = histc_select_outer_bin_edges(self, min, max);
+  at::linspace_out(
+      bin_edges, outer_bin_edges.first, outer_bin_edges.second, bin_ct + 1);
+
+  histogramdd_check_inputs(reshaped_self, bins_in, {});
+
+  at::native::xpu::histogramdd_linear_kernel(
+      reshaped_self,
+      std::optional<Tensor>(),
+      false,
+      hist,
+      bin_edges,
+      {{outer_bin_edges.first}, {outer_bin_edges.second}});
+  return hist;
+}
+
+Tensor XPUNativeFunctions::histc(
+    const Tensor& self,
+    int64_t bin_ct,
+    const Scalar& min,
+    const Scalar& max) {
+  Tensor hist = at::empty({0}, self.options(), MemoryFormat::Contiguous);
+  return XPUNativeFunctions::histc_out(self, bin_ct, min, max, hist);
 }
 
 } // namespace at
