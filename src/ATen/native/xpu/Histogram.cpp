@@ -378,6 +378,12 @@ static Tensor& histogramdd_out(
     bin_edges[dim].copy_(bins[dim]);
   }
 
+  std::vector<Tensor> bin_edges_contig(bin_edges.size());
+  for (const auto dim : c10::irange(bin_edges_contig.size())) {
+    bin_edges_contig[dim] = bin_edges[dim].contiguous();
+  }
+  TensorList bin_edges_contig_tl(bin_edges_contig);
+
   const int64_t N = self.size(-1);
   const int64_t M = std::accumulate(
       self.sizes().begin(),
@@ -398,7 +404,7 @@ static Tensor& histogramdd_out(
       reshaped_weight,
       density,
       hist,
-      bin_edges,
+      bin_edges_contig_tl,
       outer_bin_edges,
       true);
   return hist;
@@ -484,7 +490,7 @@ std::tuple<Tensor&, Tensor&> XPUNativeFunctions::histogram_out(
       reshaped_weight,
       density,
       hist,
-      bin_edges,
+      bin_edges.contiguous(),
       outer_bin_edges,
       true);
   return std::forward_as_tuple(hist, bin_edges);
