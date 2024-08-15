@@ -212,9 +212,8 @@ void histogramdd_kernel(
             ? std::optional<Tensor>(weight->contiguous())
             : std::optional<Tensor>();
 
-        Tensor hist_strides = at::tensor(
-            hist.strides(),
-            self_contig.options().dtype(c10::kLong).device(at::kCPU));
+        Tensor hist_strides_xpu =
+            at::tensor(hist.strides(), self_contig.options().dtype(c10::kLong));
         Tensor bin_edges_contig_ptr = at::empty(
             {N}, self_contig.options().dtype(c10::kUInt64).device(at::kCPU));
         Tensor num_bin_edges = at::empty(
@@ -232,8 +231,6 @@ void histogramdd_kernel(
           num_bin_edges_accessor[dim] = bin_edges[dim].numel();
         }
 
-        const Tensor hist_strides_xpu =
-            hist_strides.to(self_contig.device()).contiguous();
         const Tensor bin_edges_contig_ptr_xpu =
             bin_edges_contig_ptr.to(self_contig.device()).contiguous();
         const Tensor num_bin_edges_xpu =
@@ -315,37 +312,21 @@ void histogramdd_linear_kernel(
             ? std::optional<Tensor>(weight->contiguous())
             : std::optional<Tensor>();
 
-        Tensor hist_strides = at::tensor(
-            hist.strides(),
-            self_contig.options().dtype(c10::kLong).device(at::kCPU));
+        Tensor hist_strides_xpu =
+            at::tensor(hist.strides(), self_contig.options().dtype(c10::kLong));
+        Tensor leftmost_edges_xpu =
+            at::tensor(outer_bin_edges.first, self_contig.options());
+        Tensor rightmost_edges_xpu =
+            at::tensor(outer_bin_edges.second, self_contig.options());
+
         Tensor num_bin_edges = at::empty(
             {D}, self_contig.options().dtype(c10::kLong).device(at::kCPU));
-        Tensor leftmost_edges =
-            at::empty({D}, self_contig.options().device(at::kCPU));
-        Tensor rightmost_edges =
-            at::empty({D}, self_contig.options().device(at::kCPU));
-
         auto num_bin_edges_accessor =
             num_bin_edges.packed_accessor64<int64_t, 1>();
-        auto leftmost_edges_accessor =
-            leftmost_edges.packed_accessor64<scalar_t, 1>();
-        auto rightmost_edges_accessor =
-            rightmost_edges.packed_accessor64<scalar_t, 1>();
-
         for (const auto dim : c10::irange(D)) {
           num_bin_edges_accessor[dim] = bin_edges[dim].numel();
-          leftmost_edges_accessor[dim] = outer_bin_edges.first[dim];
-          rightmost_edges_accessor[dim] = outer_bin_edges.second[dim];
         }
-
-        const Tensor hist_strides_xpu =
-            hist_strides.to(self_contig.device()).contiguous();
-        const Tensor num_bin_edges_xpu =
-            num_bin_edges.to(self_contig.device()).contiguous();
-        const Tensor leftmost_edges_xpu =
-            leftmost_edges.to(self_contig.device()).contiguous();
-        const Tensor rightmost_edges_xpu =
-            rightmost_edges.to(self_contig.device()).contiguous();
+        const Tensor num_bin_edges_xpu = num_bin_edges.to(self_contig.device());
 
         histogramdd_linear_template<scalar_t>(
             self_contig.data_ptr<scalar_t>(),
