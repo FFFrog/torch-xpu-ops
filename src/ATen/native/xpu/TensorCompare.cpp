@@ -808,4 +808,78 @@ Tensor XPUNativeFunctions::isin(
   return out;
 }
 
+std::tuple<Tensor, Tensor> XPUNativeFunctions::mode(
+    const Tensor& self,
+    int64_t dim,
+    bool keepdim) {
+  Tensor values = at::empty({0}, self.options());
+  Tensor indices = at::empty({0}, self.options().dtype(kLong));
+  return XPUNativeFunctions::mode_out(self, dim, keepdim, values, indices);
+}
+
+std::tuple<Tensor&, Tensor&> XPUNativeFunctions::mode_out(
+    const Tensor& self,
+    int64_t dim,
+    bool keepdim,
+    Tensor& values,
+    Tensor& indices) {
+  TORCH_CHECK(
+      self.layout() == Layout::Strided,
+      "mode only supports strided layout, got: ",
+      self.layout());
+  TORCH_CHECK(
+      self.device() == values.device(),
+      "expected device '",
+      self.device(),
+      "' but got '",
+      values.device(),
+      "' for values output");
+  TORCH_CHECK(
+      self.device() == indices.device(),
+      "expected device '",
+      self.device(),
+      "' but got '",
+      indices.device(),
+      "' for indices output");
+  TORCH_CHECK(
+      self.scalar_type() == values.scalar_type(),
+      "expected scalar type '",
+      self.scalar_type(),
+      "' but got '",
+      values.scalar_type(),
+      "' for values output");
+  TORCH_CHECK(
+      indices.scalar_type() == ScalarType::Long,
+      "expected scalar type '",
+      ScalarType::Long,
+      "' but got '",
+      indices.scalar_type(),
+      "' for indices output");
+
+  dim = maybe_wrap_dim(dim, self.dim());
+  if (self.numel() == 0) {
+    auto sizes =
+        at::native::get_zero_numel_tensor_size(self, dim, keepdim, "mode()");
+    at::native::resize_output(values, sizes);
+    at::native::resize_output(indices, sizes);
+    return std::tie(values, indices);
+  } else if (at::native::_dimreduce_return_trivial_no_ident(
+                 values, self, dim, keepdim, "mode")) {
+    AT_ASSERT(values.dim() == 0);
+    indices.resize_({}).fill_(0);
+    return std::forward_as_tuple(values, indices);
+  } else {
+    auto result = [&]() {
+      NoNamesGuard guard;
+      native::xpu::mode_kernel(self, dim, keepdim, values, indices);
+      return std::tuple<Tensor&, Tensor&>{values, indices};
+    }();
+    namedinference::propagate_names_for_reduction(
+        std::get<0>(result), self, dim, keepdim);
+    namedinference::propagate_names_for_reduction(
+        std::get<1>(result), self, dim, keepdim);
+    return result;
+  }
+}
+
 } // namespace at
