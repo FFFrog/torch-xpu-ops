@@ -311,4 +311,24 @@ Tensor XPUNativeFunctions::multinomial(
   return result;
 }
 
+template <typename RNG>
+struct LogNormalStub {
+  void operator()(
+      TensorIteratorBase& iter,
+      double mean,
+      double std,
+      std::optional<Generator> gen) {
+    native::xpu::log_normal_kernel(iter, mean, std, gen);
+  }
+};
+
+Tensor& XPUNativeFunctions::log_normal_(
+    Tensor& self,
+    double mean,
+    double std,
+    std::optional<Generator> gen) {
+  return native::templates::log_normal_impl_<LogNormalStub, Generator>(
+      self, mean, std, std::move(gen));
+}
+
 } // namespace at
