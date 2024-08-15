@@ -50,7 +50,11 @@ endif()
 set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "${ONEMKL_INCLUDE_DIR}")
 set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "${ONEMKL_LIB_DIR}")
 
-set(MKL_LIB_NAMES "mkl_intel_lp64" "mkl_gnu_thread" "mkl_core" "mkl_sycl_dft")
+if(WIN32)
+  set(MKL_LIB_NAMES "mkl_intel_lp64" "mkl_intel_thread" "mkl_core" "mkl_sycl")
+else()
+  set(MKL_LIB_NAMES "mkl_intel_lp64" "mkl_gnu_thread" "mkl_core" "mkl_sycl_dft")
+endif()
 
 foreach(LIB_NAME IN LISTS MKL_LIB_NAMES)
   find_library(
