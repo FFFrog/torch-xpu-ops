@@ -151,6 +151,19 @@ static void histogramdd_prepare_out(
   histogramdd_prepare_out(input, bin_ct, hist, bin_edges);
 }
 
+static void histogram_select_outer_bin_edges_kernel(
+    const Tensor& input,
+    const int64_t N,
+    std::vector<double>& leftmost_edges,
+    std::vector<double>& rightmost_edges) {
+  auto [min, max] = at::aminmax(input, 0);
+
+  for (const auto i : c10::irange(N)) {
+    leftmost_edges[i] = min[i].item().to<double>();
+    rightmost_edges[i] = max[i].item().to<double>();
+  }
+}
+
 /* Determines the outermost bin edges. For simplicity when calling into aminmax,
  * assumes that input has already been reshaped to (M, N).
  */
@@ -185,7 +198,7 @@ select_outer_bin_edges(
   } else if (input.numel() > 0) {
     // non-empty input
 
-    at::native::xpu::histogramdd_infer_bin_edges_from_input_kernel(
+    histogram_select_outer_bin_edges_kernel(
         input, N, leftmost_edges, rightmost_edges);
   }
 
@@ -312,7 +325,7 @@ static std::vector<Tensor>& histogramdd_bin_edges_out(
 
   auto outer_bin_edges = select_outer_bin_edges(reshaped_self, range);
 
-  const int64_t bin_size = bin_ct.size();
+  const auto bin_size = bin_ct.size();
   TORCH_CHECK(
       N == bin_size,
       "histogramdd: The size of bins must be equal to the innermost dimension of the input.");
@@ -386,7 +399,8 @@ static Tensor& histogramdd_out(
       density,
       hist,
       bin_edges,
-      outer_bin_edges);
+      outer_bin_edges,
+      true);
   return hist;
 }
 
@@ -471,7 +485,8 @@ std::tuple<Tensor&, Tensor&> XPUNativeFunctions::histogram_out(
       density,
       hist,
       bin_edges,
-      outer_bin_edges);
+      outer_bin_edges,
+      true);
   return std::forward_as_tuple(hist, bin_edges);
 }
 

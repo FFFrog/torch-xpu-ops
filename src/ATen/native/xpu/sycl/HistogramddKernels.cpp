@@ -25,6 +25,7 @@ namespace at::native::xpu {
 template <typename scalar_t>
 struct HistogramddKernelFunctor {
   void operator()(sycl::nd_item<1> item_id) const {
+    auto input_data = input_;
     int64_t wi_id = item_id.get_global_id();
     if (wi_id >= input_size_) {
       return;
@@ -32,7 +33,7 @@ struct HistogramddKernelFunctor {
     int64_t ele_idx = wi_id;
     int64_t hist_idx = 0;
     for (int dim = 0; dim < input_dim_; ++dim) {
-      auto elem = input_[ele_idx * input_dim_ + dim];
+      auto elem = input_data[ele_idx][dim];
       const scalar_t* bin_edges = bin_edges_list_[dim];
       auto bin_edges_size = num_bin_edges_[dim];
       if (!(elem >= bin_edges[0] && elem <= bin_edges[bin_edges_size - 1])) {
@@ -47,16 +48,22 @@ struct HistogramddKernelFunctor {
       }
       hist_idx += bin_idx * hist_strides_[dim];
     }
-    scalar_t weight_value = weight_ ? weight_[ele_idx] : (scalar_t)1;
-    atomicAdd((sycl_global_ptr<scalar_t>)(hist_ + hist_idx), weight_value);
+
+    scalar_t value = (scalar_t)1;
+    if (use_weight_) {
+      auto weight_data = weight_;
+      value = weight_data[ele_idx];
+    }
+    atomicAdd((sycl_global_ptr<scalar_t>)(hist_ + hist_idx), value);
   }
 
   HistogramddKernelFunctor(
-      const scalar_t* input,
+      const PackedTensorAccessor64<const scalar_t, 2> input,
       const scalar_t* const* bin_edges_list,
       scalar_t* hist,
       const int64_t* hist_strides,
-      const scalar_t* weight,
+      const PackedTensorAccessor64<const scalar_t, 1> weight,
+      bool use_weight,
       int64_t input_size,
       int64_t input_dim,
       const int64_t* num_bin_edges)
@@ -65,16 +72,18 @@ struct HistogramddKernelFunctor {
         hist_(hist),
         hist_strides_(hist_strides),
         weight_(weight),
+        use_weight_(use_weight),
         input_size_(input_size),
         input_dim_(input_dim),
         num_bin_edges_(num_bin_edges) {}
 
  private:
-  const scalar_t* input_;
+  const PackedTensorAccessor64<const scalar_t, 2> input_;
   const scalar_t* const* bin_edges_list_;
   scalar_t* hist_;
   const int64_t* hist_strides_;
-  const scalar_t* weight_;
+  const PackedTensorAccessor64<const scalar_t, 1> weight_;
+  bool use_weight_;
   int64_t input_size_;
   int64_t input_dim_;
   const int64_t* num_bin_edges_;
@@ -82,11 +91,12 @@ struct HistogramddKernelFunctor {
 
 template <typename scalar_t>
 void histogramdd_template(
-    const scalar_t* input,
+    const PackedTensorAccessor64<const scalar_t, 2> input,
     const scalar_t* const* bin_edges_list,
     scalar_t* hist,
     const int64_t* hist_strides,
-    const scalar_t* weight,
+    const PackedTensorAccessor64<const scalar_t, 1> weight,
+    bool use_weight,
     int64_t input_size,
     int64_t input_dim,
     const int64_t* num_bin_edges) {
@@ -96,6 +106,7 @@ void histogramdd_template(
       hist,
       hist_strides,
       weight,
+      use_weight,
       input_size,
       input_dim,
       num_bin_edges);
@@ -108,6 +119,7 @@ void histogramdd_template(
 template <typename scalar_t>
 struct HistogramddLinearKernelFunctor {
   void operator()(sycl::nd_item<1> item_id) const {
+    auto input_data = input_;
     int64_t wi_id = item_id.get_global_id();
     if (wi_id >= input_size_) {
       return;
@@ -115,7 +127,7 @@ struct HistogramddLinearKernelFunctor {
     int64_t ele_idx = wi_id;
     int64_t hist_idx = 0;
     for (int dim = 0; dim < input_dim_; ++dim) {
-      auto i_value = input_[ele_idx * input_dim_ + dim];
+      auto i_value = input_data[ele_idx][dim];
       auto leftmost_edge = leftmost_edges_[dim];
       auto rightmost_edge = rightmost_edges_[dim];
       auto bin_size = num_bin_edges_[dim] - 1;
@@ -129,24 +141,33 @@ struct HistogramddLinearKernelFunctor {
       }
       hist_idx += bin_idx * hist_strides_[dim];
     }
-    scalar_t weight_value = weight_ ? weight_[ele_idx] : (scalar_t)1;
-    atomicAdd((sycl_global_ptr<scalar_t>)(hist_ + hist_idx), weight_value);
+
+    scalar_t value = (scalar_t)1;
+    if (use_weight_) {
+      auto weight_data = weight_;
+      value = weight_data[wi_id];
+    }
+    atomicAdd((sycl_global_ptr<scalar_t>)(hist_ + hist_idx), value);
   }
 
   HistogramddLinearKernelFunctor(
-      const scalar_t* input,
+      const PackedTensorAccessor64<const scalar_t, 2> input,
+      const scalar_t* const* bin_edges_list,
       scalar_t* hist,
       const int64_t* hist_strides,
-      const scalar_t* weight,
+      const PackedTensorAccessor64<const scalar_t, 1> weight,
+      bool use_weight,
       int64_t input_size,
       int64_t input_dim,
       const int64_t* num_bin_edges,
       const scalar_t* leftmost_edges,
       const scalar_t* rightmost_edges)
       : input_(input),
+        bin_edges_list_(bin_edges_list),
         hist_(hist),
         hist_strides_(hist_strides),
         weight_(weight),
+        use_weight_(use_weight),
         input_size_(input_size),
         input_dim_(input_dim),
         num_bin_edges_(num_bin_edges),
@@ -154,10 +175,12 @@ struct HistogramddLinearKernelFunctor {
         rightmost_edges_(rightmost_edges) {}
 
  private:
-  const scalar_t* input_;
+  const PackedTensorAccessor64<const scalar_t, 2> input_;
+  const scalar_t* const* bin_edges_list_;
   scalar_t* hist_;
   const int64_t* hist_strides_;
-  const scalar_t* weight_;
+  const PackedTensorAccessor64<const scalar_t, 1> weight_;
+  bool use_weight_;
   int64_t input_size_;
   int64_t input_dim_;
   const int64_t* num_bin_edges_;
@@ -167,10 +190,12 @@ struct HistogramddLinearKernelFunctor {
 
 template <typename scalar_t>
 void histogramdd_linear_template(
-    const scalar_t* input,
+    const PackedTensorAccessor64<const scalar_t, 2> input,
+    const scalar_t* const* bin_edges_list,
     scalar_t* hist,
     const int64_t* hist_strides,
-    const scalar_t* weight,
+    const PackedTensorAccessor64<const scalar_t, 1> weight,
+    bool use_weight,
     int64_t input_size,
     int64_t input_dim,
     const int64_t* num_bin_edges,
@@ -178,9 +203,11 @@ void histogramdd_linear_template(
     const scalar_t* rightmost_edges) {
   HistogramddLinearKernelFunctor<scalar_t> kfn(
       input,
+      bin_edges_list,
       hist,
       hist_strides,
       weight,
+      use_weight,
       input_size,
       input_dim,
       num_bin_edges,
@@ -206,18 +233,29 @@ void histogramdd_kernel(
 
   AT_DISPATCH_FLOATING_TYPES_AND2(
       kBFloat16, kHalf, self.scalar_type(), "histogram_xpu", [&]() {
-        Tensor self_contig = self.contiguous();
+        const auto self_accessor = self.packed_accessor64<const scalar_t, 2>();
+        const auto weight_accessor = weight.has_value()
+            ? weight.value().packed_accessor64<const scalar_t, 1>()
+            : PackedTensorAccessor64<const scalar_t, 1>(
+                  nullptr, self.sizes().data(), self.strides().data());
 
-        const auto weight_contig = weight.has_value()
-            ? std::optional<Tensor>(weight->contiguous())
-            : std::optional<Tensor>();
-
-        Tensor hist_strides_xpu =
-            at::tensor(hist.strides(), self_contig.options().dtype(c10::kLong));
+        Tensor hist_strides_xpu = at::tensor(
+            hist.strides(),
+            self.options()
+                .dtype(c10::kLong)
+                .memory_format(at::MemoryFormat::Contiguous));
         Tensor bin_edges_contig_ptr = at::empty(
-            {N}, self_contig.options().dtype(c10::kUInt64).device(at::kCPU));
+            {N},
+            self.options()
+                .dtype(c10::kUInt64)
+                .device(at::kCPU)
+                .memory_format(at::MemoryFormat::Contiguous));
         Tensor num_bin_edges = at::empty(
-            {N}, self_contig.options().dtype(c10::kLong).device(at::kCPU));
+            {N},
+            self.options()
+                .dtype(c10::kLong)
+                .device(at::kCPU)
+                .memory_format(at::MemoryFormat::Contiguous));
 
         auto bin_edges_contig_ptr_accessor =
             bin_edges_contig_ptr.packed_accessor64<uint64_t, 1>();
@@ -232,18 +270,17 @@ void histogramdd_kernel(
         }
 
         const Tensor bin_edges_contig_ptr_xpu =
-            bin_edges_contig_ptr.to(self_contig.device()).contiguous();
-        const Tensor num_bin_edges_xpu =
-            num_bin_edges.to(self_contig.device()).contiguous();
+            bin_edges_contig_ptr.to(self.device());
+        const Tensor num_bin_edges_xpu = num_bin_edges.to(self.device());
 
         histogramdd_template<scalar_t>(
-            self_contig.data_ptr<scalar_t>(),
+            self_accessor,
             reinterpret_cast<const scalar_t* const*>(
                 bin_edges_contig_ptr_xpu.const_data_ptr()),
             hist.data_ptr<scalar_t>(),
             hist_strides_xpu.const_data_ptr<int64_t>(),
-            weight_contig.has_value() ? weight_contig->data_ptr<scalar_t>()
-                                      : nullptr,
+            weight_accessor,
+            weight.has_value(),
             M,
             N,
             num_bin_edges_xpu.const_data_ptr<int64_t>());
@@ -278,8 +315,8 @@ void histogramdd_linear_kernel(
     bool density,
     Tensor& hist,
     const TensorList& bin_edges,
-    const std::pair<std::vector<double>, std::vector<double>>&
-        outer_bin_edges) {
+    const std::pair<std::vector<double>, std::vector<double>>& outer_bin_edges,
+    bool local_search) {
   globalContext().alertNotDeterministic("histogramdd_linear_kernel_xpu");
   hist.fill_(0);
 
@@ -306,34 +343,58 @@ void histogramdd_linear_kernel(
 
   AT_DISPATCH_FLOATING_TYPES_AND2(
       kBFloat16, kHalf, self.scalar_type(), "histogram_linear_xpu", [&]() {
-        Tensor self_contig = self.contiguous();
+        const auto self_accessor = self.packed_accessor64<const scalar_t, 2>();
+        const auto weight_accessor = weight.has_value()
+            ? weight.value().packed_accessor64<const scalar_t, 1>()
+            : PackedTensorAccessor64<const scalar_t, 1>(
+                  nullptr, self.sizes().data(), self.strides().data());
 
-        const auto weight_contig = weight.has_value()
-            ? std::optional<Tensor>(weight->contiguous())
-            : std::optional<Tensor>();
+        Tensor hist_strides_xpu = at::tensor(
+            hist.strides(),
+            self.options()
+                .dtype(c10::kLong)
+                .memory_format(at::MemoryFormat::Contiguous));
+        Tensor leftmost_edges_xpu = at::tensor(
+            outer_bin_edges.first,
+            self.options().memory_format(at::MemoryFormat::Contiguous));
+        Tensor rightmost_edges_xpu = at::tensor(
+            outer_bin_edges.second,
+            self.options().memory_format(at::MemoryFormat::Contiguous));
 
-        Tensor hist_strides_xpu =
-            at::tensor(hist.strides(), self_contig.options().dtype(c10::kLong));
-        Tensor leftmost_edges_xpu =
-            at::tensor(outer_bin_edges.first, self_contig.options());
-        Tensor rightmost_edges_xpu =
-            at::tensor(outer_bin_edges.second, self_contig.options());
-
+        Tensor bin_edges_contig_ptr = at::empty(
+            {N},
+            self.options()
+                .dtype(c10::kUInt64)
+                .device(at::kCPU)
+                .memory_format(at::MemoryFormat::Contiguous));
         Tensor num_bin_edges = at::empty(
-            {D}, self_contig.options().dtype(c10::kLong).device(at::kCPU));
+            {D},
+            self.options()
+                .dtype(c10::kLong)
+                .device(at::kCPU)
+                .memory_format(at::MemoryFormat::Contiguous));
+        auto bin_edges_contig_ptr_accessor =
+            bin_edges_contig_ptr.packed_accessor64<uint64_t, 1>();
         auto num_bin_edges_accessor =
             num_bin_edges.packed_accessor64<int64_t, 1>();
         for (const auto dim : c10::irange(D)) {
+          const scalar_t* data_ptr = bin_edges[dim].const_data_ptr<scalar_t>();
+          bin_edges_contig_ptr_accessor[dim] =
+              reinterpret_cast<uint64_t>(data_ptr);
           num_bin_edges_accessor[dim] = bin_edges[dim].numel();
         }
-        const Tensor num_bin_edges_xpu = num_bin_edges.to(self_contig.device());
+        const Tensor bin_edges_contig_ptr_xpu =
+            bin_edges_contig_ptr.to(self.device());
+        const Tensor num_bin_edges_xpu = num_bin_edges.to(self.device());
 
         histogramdd_linear_template<scalar_t>(
-            self_contig.data_ptr<scalar_t>(),
+            self_accessor,
+            reinterpret_cast<const scalar_t* const*>(
+                bin_edges_contig_ptr_xpu.const_data_ptr()),
             hist.data_ptr<scalar_t>(),
             hist_strides_xpu.const_data_ptr<int64_t>(),
-            weight_contig.has_value() ? weight_contig->data_ptr<scalar_t>()
-                                      : nullptr,
+            weight_accessor,
+            weight.has_value(),
             M,
             N,
             num_bin_edges_xpu.const_data_ptr<int64_t>(),
