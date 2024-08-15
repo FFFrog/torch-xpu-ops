@@ -20,10 +20,4 @@ void histogramdd_linear_kernel(
     const std::pair<std::vector<double>, std::vector<double>>& outer_bin_edges,
     bool local_search);
 
-void histogramdd_infer_bin_edges_from_input_kernel(
-    const Tensor& input,
-    const int64_t N,
-    std::vector<double>& leftmost_edges,
-    std::vector<double>& rightmost_edges);
-
 } // namespace at::native::xpu
