@@ -425,40 +425,6 @@ void histogramdd_linear_kernel(
   }
 }
 
-template <typename scalar_t>
-void histogramdd_infer_bin_edges_from_input_kernel_template(
-    const Tensor& input,
-    const int64_t N,
-    std::vector<double>& leftmost_edges,
-    std::vector<double>& rightmost_edges) {
-  // Calls aminmax on input with dim=0, reducing all but the innermost dimension
-  // of input.
-  auto [min, max] = at::aminmax(input, 0);
-
-  Tensor min_cpu = min.cpu();
-  Tensor max_cpu = max.cpu();
-
-  TORCH_INTERNAL_ASSERT(min_cpu.is_contiguous() && max_cpu.is_contiguous());
-
-  const scalar_t* min_data = min_cpu.const_data_ptr<scalar_t>();
-  std::copy(min_data, min_data + N, leftmost_edges.begin());
-
-  const scalar_t* max_data = max_cpu.const_data_ptr<scalar_t>();
-  std::copy(max_data, max_data + N, rightmost_edges.begin());
-}
-
-void histogramdd_infer_bin_edges_from_input_kernel(
-    const Tensor& input,
-    const int64_t N,
-    std::vector<double>& leftmost_edges,
-    std::vector<double>& rightmost_edges) {
-  AT_DISPATCH_FLOATING_TYPES(
-      input.scalar_type(), "histogramdd_infer_bin_edges_from_input_xpu", [&]() {
-        histogramdd_infer_bin_edges_from_input_kernel_template<scalar_t>(
-            input, N, leftmost_edges, rightmost_edges);
-      });
-}
-
 } // namespace at::native::xpu
 
 #pragma GCC diagnostic pop
