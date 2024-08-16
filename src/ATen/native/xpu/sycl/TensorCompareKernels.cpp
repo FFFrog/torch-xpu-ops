@@ -142,6 +142,17 @@ struct ModeOpValueIndex {
   int64_t index;
 };
 
+// value handler for non standard bool value
+template <typename scalar_t>
+inline scalar_t value_ptr_convert(const scalar_t* base, int64_t index) {
+  return base[index];
+}
+
+template <>
+inline bool value_ptr_convert<bool>(const bool* base, int64_t index) {
+  return reinterpret_cast<const uint8_t*>(base)[index] > 0 ? true : false;
+}
+
 // problem size >> array size
 template <typename T, class Functor, typename item_t>
 static inline void ConditionalInclusiveScanForMode(
@@ -350,7 +361,7 @@ void mode_impl(
 
       // load piece of data into slm
       if (inner_id < problem_size) {
-        slm_ptr[item_id] = problem_values_ptr[global_index];
+        slm_ptr[item_id] = value_ptr_convert(problem_values_ptr, global_index);
       }
       item.barrier(sycl_local_fence);
 
@@ -372,8 +383,9 @@ void mode_impl(
             // for the first one, its pre value is not in slm
             // slm:          0 1 1
             // global mem: 0 ^ ---- the pre one is in global mem
-            judgeEqual =
-                bool(problem_values_ptr[global_index - 1] == slm_ptr[item_id]);
+            judgeEqual = bool(
+                value_ptr_convert(problem_values_ptr, global_index - 1) ==
+                slm_ptr[item_id]);
           } else {
             judgeEqual = bool(slm_ptr[item_id - 1] == slm_ptr[item_id]);
           }
@@ -479,8 +491,8 @@ void mode_impl(
       // index:                0 1 2 3 [4] 5 6 7
       // sorted values:        0 0 1 1 [1] 3 4 4
       // find out the most-appeared value, it is 1
-      auto answer_mode_value =
-          problem_values_ptr[outer_offset + reduce_min_index];
+      auto answer_mode_value = value_ptr_convert(
+          problem_values_ptr, outer_offset + reduce_min_index);
 
       // write back
       auto output_index =
@@ -522,7 +534,8 @@ void mode_fused_impl(
     // load values and record indices into slm
     // slm value   1 4 3 4 0 1 0 1
     // slm indices 0 1 2 3 4 5 6 7
-    slm_value_indice_ptr[item_id].value = problem_values_ptr[global_index];
+    slm_value_indice_ptr[item_id].value =
+        value_ptr_convert(problem_values_ptr, global_index);
     slm_value_indice_ptr[item_id].index = item_id;
     item.barrier(sycl_local_fence);
 
