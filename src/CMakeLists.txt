@@ -29,7 +29,7 @@ if(CLANG_FORMAT)
   add_dependencies(torch_xpu_ops CL_FORMAT_CSRCS)
 endif()
 
-target_include_directories(torch_xpu_ops PUBLIC ${ONEMKL_INCLUDE_DIR})
+target_include_directories(torch_xpu_ops PUBLIC ${TORCH_XPU_OPS_ONEMKL_INCLUDE_DIR})
 if(WIN32)
   target_compile_options(torch_xpu_ops PRIVATE "-D__MKL_FALLBACK_TO_CPU")
 endif()
