@@ -11,6 +11,7 @@
 #include <ATen/native/xpu/sycl/ReduceMaxValuesKernels.h>
 #include <ATen/native/xpu/sycl/ReduceMinValuesKernels.h>
 #include <ATen/native/xpu/sycl/TensorCompareKernels.h>
+#include <ATen/native/xpu/sycl/TensorModeKernel.h>
 #include <comm/ReduceOpsUtils.h>
 
 namespace at {
