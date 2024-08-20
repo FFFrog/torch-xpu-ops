@@ -40,7 +40,6 @@ skip_dict = {
         "test_noncontiguous_samples_nn_functional_conv_transpose3d_xpu_int64",
         "test_noncontiguous_samples_nn_functional_rrelu_xpu_float32",
         "test_numpy_ref_linalg_tensorinv_xpu_float64",
-        "test_out_mode_xpu_float32",
         "test_out_nanmean_xpu_float32",
         "test_out_requires_grad_error_sparse_sampled_addmm_xpu_complex64",
         "test_out_requires_grad_error_sparse_sampled_addmm_xpu_float32",
