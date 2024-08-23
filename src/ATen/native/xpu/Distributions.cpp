@@ -311,4 +311,24 @@ Tensor XPUNativeFunctions::multinomial(
   return result;
 }
 
+template <typename RNG>
+struct CauchyStub {
+  void operator()(
+      TensorIteratorBase& iter,
+      double median,
+      double sigma,
+      c10::optional<Generator> gen) {
+    native::xpu::cauchy_kernel(iter, median, sigma, gen);
+  }
+};
+
+Tensor& XPUNativeFunctions::cauchy_(
+    Tensor& self,
+    double median,
+    double sigma,
+    std::optional<Generator> generator) {
+  return native::templates::cauchy_impl_<CauchyStub, Generator>(
+      self, median, sigma, std::move(generator));
+}
+
 } // namespace at
