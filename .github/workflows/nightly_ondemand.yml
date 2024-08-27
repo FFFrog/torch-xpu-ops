@@ -76,14 +76,6 @@ jobs:
       python: ${{ github.event_name == 'schedule' && '3.10' || inputs.python }}
       runner: linux.idc.xpu
   
-  Linux-Weekly-UT-Tests-ABI-0:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 16 * * 5'
-    uses: ./.github/workflows/_linux_ut.yml
-    with: 
-      abi: 0
-      ut: op_example,op_extended,op_ut,torch_xpu
-      runner: linux.idc.xpu
-
   Linux-Nightly-Ondemand-E2E-Tests:
     runs-on: pvc_e2e
     # Don't run on forked repos
@@ -175,6 +167,7 @@ jobs:
           source .github/scripts/env.sh
           cd ../pytorch
           pip install -r requirements.txt
+          export _GLIBCXX_USE_CXX11_ABI=0
           export CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
           python setup.py bdist_wheel
           pip install --force-reinstall dist/*.whl
