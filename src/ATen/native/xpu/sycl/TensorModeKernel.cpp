@@ -8,8 +8,6 @@
 
 namespace at::native::xpu {
 
-namespace {
-
 using namespace at::xpu::detail;
 
 // this helper's meaning:
@@ -812,7 +810,6 @@ void mode_kernel_impl(
     indices.squeeze_(dim);
   }
 }
-} // namespace
 
 void mode_kernel(
     const Tensor& self,
