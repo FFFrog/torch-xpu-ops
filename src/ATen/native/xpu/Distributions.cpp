@@ -8,6 +8,7 @@
 #include <ATen/xpu/XPUNativeFunctions.h>
 
 #include <ATen/native/xpu/sycl/DistributionKernels.h>
+#include <ATen/native/xpu/sycl/Distributions.h>
 #include <ATen/native/xpu/sycl/MultinomialKernel.h>
 #include <ATen/ops/div.h>
 
@@ -326,9 +327,25 @@ Tensor& XPUNativeFunctions::cauchy_(
     Tensor& self,
     double median,
     double sigma,
-    std::optional<Generator> generator) {
+    ::std::optional<Generator> generator) {
   return native::templates::cauchy_impl_<CauchyStub, Generator>(
       self, median, sigma, std::move(generator));
+}
+
+Tensor XPUNativeFunctions::binomial(
+    const Tensor& count,
+    const Tensor& prob,
+    ::std::optional<Generator> generator) {
+  auto gen = get_generator_or_default<at::XPUGeneratorImpl>(
+      generator, at::xpu::detail::getDefaultXPUGenerator());
+  Tensor ret = at::empty(count.sizes(), count.options());
+  at::TensorIterator iter = at::TensorIteratorConfig()
+                                .add_output(ret)
+                                .add_input(count)
+                                .add_input(prob)
+                                .build();
+  at::native::xpu::launch_binomial_xpu_kernel(iter, gen);
+  return ret;
 }
 
 } // namespace at
