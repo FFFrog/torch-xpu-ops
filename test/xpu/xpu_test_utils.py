@@ -237,6 +237,7 @@ _xpu_computation_op_list = [
     "nan_to_num",
     "scatter_reduce",
     "nanmean",
+    "mode",
 ]
 
 _ops_without_cuda_support = [
