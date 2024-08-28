@@ -163,6 +163,10 @@ skip_dict = {
         "test_python_ref_executor__refs_square_executor_aten_xpu_complex128",
         "test_python_ref_torch_fallback__refs_square_xpu_complex128",
         "test_python_ref_torch_fallback__refs_square_xpu_complex64",
+        # returned index is dependent on input data and implementation detail, and no
+        # specification is given to uniquely identify the correct index 
+        # (e.g. index with maximal / minimal value)
+        "test_compare_cpu_mode",
         # Skip list of new added when porting XPU operators.
         # See: https://github.com/intel/torch-xpu-ops/issues/128
         "test_dtypes_view_as_complex_xpu",  # Didn't align with CUDA, The following dtypes did not work in backward but are listed by the OpInfo: {torch.bfloat16}
