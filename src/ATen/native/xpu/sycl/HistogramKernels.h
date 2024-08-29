@@ -17,7 +17,6 @@ void histogramdd_linear_kernel(
     bool density,
     Tensor& hist,
     const TensorList& bin_edges,
-    const std::pair<std::vector<double>, std::vector<double>>& outer_bin_edges,
     bool local_search);
 
 } // namespace at::native::xpu
