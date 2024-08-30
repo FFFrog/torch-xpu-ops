@@ -1,5 +1,3 @@
-#include <algorithm>
-#include <cstdint>
 #pragma clang diagnostic push
 #pragma GCC diagnostic push
 // Avoid SYCL compiler return-type error
@@ -28,34 +26,37 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
     auto input_data = input_;
     int64_t wi_id = item_id.get_local_linear_id();
     int64_t wg_id = item_id.get_group_linear_id();
-    int64_t ele_idx = wg_id;
-    if (ele_idx >= input_size_) {
-      return;
-    }
+    int64_t batch_idx = wi_id / batch_wg_size_;
+    int64_t batch_local_id = wi_id % batch_wg_size_;
 
-    for (int64_t dim = 0; dim < input_dim_; ++dim) {
+    int64_t ele_idx =
+        (batch_num_ == 1) ? wg_id : wg_id * batch_num_ + batch_idx;
+    bool active = (ele_idx < input_size_);
+
+    for (int64_t dim = 0; active && dim < input_dim_; ++dim) {
       auto elem = input_data[ele_idx][dim];
       const scalar_t* bin_edges = bin_edges_list_[dim];
       int64_t bin_edges_size = num_bin_edges_[dim];
       if (!(elem >= bin_edges[0] && elem <= bin_edges[bin_edges_size - 1])) {
-        return;
+        active = false;
+        break;
       }
     }
 
     // initialize slm
-    if (wi_id == 0) {
-      slm_[slm_hist_idx_] = 0;
+    if (active && batch_local_id == 0) {
+      slm_[batch_idx] = 0;
     }
     item_id.barrier(sycl_local_fence);
 
     // loop if wg_size_ is smaller than total_bin_size_
-    for (int s = 0; s < scan_size_; ++s) {
+    for (int s = 0; active && s < scan_size_; ++s) {
       // map each work item to its corresponding bin
-      // (wi_id, s) |-> (dim, bin_idx)
+      // (batch_local_id, s) |-> (dim, bin_idx)
       int64_t dim = 0;
       int64_t bin_idx = -1;
 
-      int64_t target_bin_linear_idx = wi_id + s * scan_size_;
+      int64_t target_bin_linear_idx = batch_local_id + s * scan_size_;
       if (target_bin_linear_idx < total_bin_size_) {
         for (int64_t cnt = 0; dim < input_dim_; ++dim) {
           int64_t bin_size = num_bin_edges_[dim] - 1;
@@ -68,7 +69,8 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
       }
 
       if (bin_idx == -1) {
-        continue;
+        active = false;
+        break;
       }
 
       auto elem = input_data[ele_idx][dim];
@@ -86,15 +88,17 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
         }
       }
       if (match) {
-        auto ptr = sycl_local_ptr<int64_t>(
-            slm_.template get_multi_ptr<sycl::access::decorated::no>().get());
-        atomicAdd(ptr, bin_idx * hist_strides_[dim]);
+        auto ptr =
+            slm_.template get_multi_ptr<sycl::access::decorated::no>().get();
+        atomicAdd(
+            sycl_local_ptr<int64_t>(ptr + batch_idx),
+            bin_idx * hist_strides_[dim]);
       }
     }
-
     item_id.barrier(sycl_local_fence);
-    if (wi_id == 0) {
-      auto hist_idx = slm_[slm_hist_idx_];
+
+    if (active && batch_local_id == 0) {
+      auto hist_idx = slm_[batch_idx];
       scalar_t value = (scalar_t)1;
       if (use_weight_) {
         auto weight_data = weight_;
@@ -106,7 +110,7 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
 
   void sycl_ker_config_convention(sycl::handler& cgh) {
     // SLM is used for accumulating hist_idx
-    slm_ = sycl_local_acc_t<int64_t, 1>(1, cgh);
+    slm_ = sycl_local_acc_t<int64_t, 1>(batch_wg_size_, cgh);
   }
 
   HistogramddKernelFunctor(
@@ -121,6 +125,8 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
       const int64_t* num_bin_edges,
       int64_t total_bin_size,
       int64_t wg_size,
+      int64_t batch_num,
+      int64_t batch_wg_size,
       int64_t scan_size)
       : input_(input),
         bin_edges_list_(bin_edges_list),
@@ -133,6 +139,8 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
         num_bin_edges_(num_bin_edges),
         total_bin_size_(total_bin_size),
         wg_size_(wg_size),
+        batch_num_(batch_num),
+        batch_wg_size_(batch_wg_size),
         scan_size_(scan_size) {}
 
  private:
@@ -147,10 +155,11 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
   const int64_t* num_bin_edges_;
   const int64_t total_bin_size_;
   const int64_t wg_size_;
+  const int64_t batch_num_;
+  const int64_t batch_wg_size_;
   const int64_t scan_size_;
 
   sycl_local_acc_t<int64_t, 1> slm_;
-  static constexpr int slm_hist_idx_ = 0;
 };
 
 template <typename scalar_t>
@@ -167,12 +176,18 @@ void histogramdd_template(
     const int64_t total_bin_size) {
   using Kernel = HistogramddKernelFunctor<scalar_t>;
   const int64_t max_wg_size = syclMaxWorkGroupSize<Kernel>();
+  int64_t num_wg = input_size;
+  int64_t batch_num = 1;
+  int64_t batch_wg_size = max_wg_size;
+  int64_t scan_size = (total_bin_size + batch_wg_size - 1) / batch_wg_size;
   int64_t work_group_size = max_wg_size;
-  if (work_group_size > total_bin_size) {
-    work_group_size = total_bin_size;
+  if (max_wg_size >= 2 * total_bin_size) {
+    scan_size = 1;
+    batch_wg_size = total_bin_size;
+    batch_num = max_wg_size / batch_wg_size;
+    work_group_size = batch_num * batch_wg_size;
+    num_wg = (input_size + batch_num - 1) / batch_num;
   }
-  int64_t scan_size = (total_bin_size + work_group_size - 1) / work_group_size;
-  const int64_t num_wg = input_size;
   Kernel kfn(
       input,
       bin_edges_list,
@@ -185,6 +200,8 @@ void histogramdd_template(
       num_bin_edges,
       total_bin_size,
       work_group_size,
+      batch_num,
+      batch_wg_size,
       scan_size);
   sycl_kernel_submit(
       num_wg * work_group_size, work_group_size, getCurrentSYCLQueue(), kfn);
