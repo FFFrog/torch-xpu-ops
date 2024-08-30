@@ -26,11 +26,10 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
     auto input_data = input_;
     int64_t wi_id = item_id.get_local_linear_id();
     int64_t wg_id = item_id.get_group_linear_id();
-    int64_t batch_idx = wi_id / batch_wg_size_;
-    int64_t batch_local_id = wi_id % batch_wg_size_;
+    int64_t batch_idx = (batch_num_ == 1) ? 0 : wi_id / batch_wg_size_;
+    int64_t batch_local_id = (batch_num_ == 1) ? wi_id : wi_id % batch_wg_size_;
 
-    int64_t ele_idx =
-        (batch_num_ == 1) ? wg_id : wg_id * batch_num_ + batch_idx;
+    int64_t ele_idx = wg_id * batch_num_ + batch_idx;
     bool active = (ele_idx < input_size_);
 
     for (int64_t dim = 0; active && dim < input_dim_; ++dim) {
@@ -56,16 +55,19 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
       int64_t dim = 0;
       int64_t bin_idx = -1;
 
-      int64_t target_bin_linear_idx = batch_local_id + s * scan_size_;
-      if (target_bin_linear_idx < total_bin_size_) {
-        for (int64_t cnt = 0; dim < input_dim_; ++dim) {
-          int64_t bin_size = num_bin_edges_[dim] - 1;
-          if (target_bin_linear_idx - cnt < bin_size) {
-            bin_idx = target_bin_linear_idx - cnt;
-            break;
-          }
-          cnt += bin_size;
+      int64_t target_bin_linear_idx = batch_local_id + s * batch_wg_size_;
+      if (target_bin_linear_idx >= total_bin_size_) {
+        active = false;
+        break;
+      }
+
+      for (int64_t cnt = 0; dim < input_dim_; ++dim) {
+        int64_t bin_size = num_bin_edges_[dim] - 1;
+        if (target_bin_linear_idx - cnt < bin_size) {
+          bin_idx = target_bin_linear_idx - cnt;
+          break;
         }
+        cnt += bin_size;
       }
 
       if (bin_idx == -1) {
@@ -110,7 +112,7 @@ struct HistogramddKernelFunctor : public __SYCL_KER_CONFIG_CONVENTION__ {
 
   void sycl_ker_config_convention(sycl::handler& cgh) {
     // SLM is used for accumulating hist_idx
-    slm_ = sycl_local_acc_t<int64_t, 1>(batch_wg_size_, cgh);
+    slm_ = sycl_local_acc_t<int64_t, 1>(batch_num_, cgh);
   }
 
   HistogramddKernelFunctor(
@@ -409,7 +411,7 @@ void histogramdd_xpu_contiguous(
     rightmost_edge[dim] =
         bin_edges[dim][num_bin_edges[dim] - 1].item().to<input_t>();
 
-    total_bin_size *= num_bin_edges[dim] - 1;
+    total_bin_size += num_bin_edges[dim] - 1;
   }
 
   Tensor hist_strides_xpu = at::tensor(
