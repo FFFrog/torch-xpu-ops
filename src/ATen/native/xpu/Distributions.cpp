@@ -348,4 +348,61 @@ Tensor XPUNativeFunctions::binomial(
   return ret;
 }
 
+Tensor& XPUNativeFunctions::binomial_out(
+    const Tensor& count,
+    const Tensor& prob,
+    ::std::optional<Generator> generator,
+    Tensor& out) {
+  out = XPUNativeFunctions::binomial(count, prob, generator);
+  return out;
+}
+
+Tensor XPUNativeFunctions::_sample_dirichlet(
+    const Tensor& alpha,
+    ::std::optional<Generator> generator) {
+  auto gen = get_generator_or_default<at::XPUGeneratorImpl>(
+      generator, at::xpu::detail::getDefaultXPUGenerator());
+  Tensor ret = at::empty(alpha.sizes(), alpha.options());
+  at::native::xpu::launch_gamma_kernel(ret, alpha, gen);
+  auto gamma_sum = ret.sum(/*dim=*/-1, /*keepdim=*/true);
+  auto iter = at::TensorIteratorConfig()
+                  .add_output(ret)
+                  .add_input(ret)
+                  .add_input(gamma_sum)
+                  .build();
+  at::native::xpu::launch_dirichlet_kernel(iter);
+  return ret;
+}
+
+Tensor& XPUNativeFunctions::_sample_dirichlet_out(
+    const Tensor& alpha,
+    ::std::optional<Generator> generator,
+    Tensor& out) {
+  out = XPUNativeFunctions::_sample_dirichlet(alpha, generator);
+  return out;
+}
+
+Tensor XPUNativeFunctions::_dirichlet_grad(
+    const Tensor& x,
+    const Tensor& alpha,
+    const Tensor& total) {
+  Tensor ret = at::empty(x.sizes(), x.options());
+  auto iter = at::TensorIteratorConfig()
+                  .add_output(ret)
+                  .add_input(x)
+                  .add_input(alpha)
+                  .add_input(total)
+                  .build();
+  at::native::xpu::launch_dirichlet_grad_kernel(iter);
+  return ret;
+}
+
+Tensor& XPUNativeFunctions::_dirichlet_grad_out(
+    const Tensor& x,
+    const Tensor& alpha,
+    const Tensor& total,
+    Tensor& out) {
+  out = XPUNativeFunctions::_dirichlet_grad(x, alpha, total);
+  return out;
+}
 } // namespace at
