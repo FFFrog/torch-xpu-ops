@@ -14,6 +14,7 @@
 
 #include <ATen/native/xpu/sycl/ComplexKernels.h>
 #include <ATen/native/xpu/sycl/RandpermKernel.h>
+#include <ATen/native/xpu/sycl/TensorFactoriesKernels.h>
 #include <ATen/xpu/EmptyTensor.h>
 
 namespace at {
@@ -181,6 +182,60 @@ Tensor& XPUNativeFunctions::randperm_out(
   native::xpu::randperm_kernel(result, n, generator);
 
   return result;
+}
+
+Tensor XPUNativeFunctions::tril_indices(
+    int64_t row,
+    int64_t col,
+    int64_t offset,
+    c10::optional<at::ScalarType> dtype,
+    c10::optional<at::Layout> layout,
+    c10::optional<at::Device> device,
+    c10::optional<bool> pin_memory) {
+  TensorOptions options =
+      TensorOptions().dtype(dtype).layout(layout).device(device).pinned_memory(
+          pin_memory);
+  return native::xpu::tril_indices_kernel(row, col, offset, options);
+}
+
+Tensor& XPUNativeFunctions::tril_indices_out(
+    int64_t row,
+    int64_t col,
+    int64_t offset,
+    Tensor& out) {
+  if (out.defined()) {
+    out = native::xpu::tril_indices_kernel(row, col, offset, out.options());
+  } else {
+    out = XPUNativeFunctions::tril_indices(row, col, offset, {}, {}, {}, {});
+  }
+  return out;
+}
+
+Tensor XPUNativeFunctions::triu_indices(
+    int64_t row,
+    int64_t col,
+    int64_t offset,
+    c10::optional<at::ScalarType> dtype,
+    c10::optional<at::Layout> layout,
+    c10::optional<at::Device> device,
+    c10::optional<bool> pin_memory) {
+  TensorOptions options =
+      TensorOptions().dtype(dtype).layout(layout).device(device).pinned_memory(
+          pin_memory);
+  return native::xpu::triu_indices_kernel(row, col, offset, options);
+}
+
+Tensor& XPUNativeFunctions::triu_indices_out(
+    int64_t row,
+    int64_t col,
+    int64_t offset,
+    Tensor& out) {
+  if (out.defined()) {
+    out = native::xpu::triu_indices_kernel(row, col, offset, out.options());
+  } else {
+    out = XPUNativeFunctions::triu_indices(row, col, offset, {}, {}, {}, {});
+  }
+  return out;
 }
 
 } // namespace at
