@@ -1456,27 +1456,6 @@ Tensor XPUNativeFunctions::count_nonzero(const Tensor& self, IntArrayRef dims) {
   return (self != 0).sum(dims);
 }
 
-Tensor XPUNativeFunctions::put(
-    const Tensor& self,
-    const Tensor& index,
-    const Tensor& source,
-    bool accumulate) {
-  Tensor out = self.clone(at::MemoryFormat::Preserve);
-  XPUNativeFunctions::put_(out, index, source, accumulate);
-  return out;
-}
-
-Tensor& XPUNativeFunctions::put_out(
-    const Tensor& self,
-    const Tensor& index,
-    const Tensor& source,
-    bool accumulate,
-    Tensor& out) {
-  out = self.clone(at::MemoryFormat::Preserve);
-  XPUNativeFunctions::put_(out, index, source, accumulate);
-  return out;
-}
-
 Tensor& XPUNativeFunctions::put_(
     Tensor& self,
     const Tensor& index,
