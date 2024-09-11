@@ -68,11 +68,9 @@ runs:
           pip install --force-reinstall git+https://github.com/huggingface/transformers@${TRANSFORMERS_VERSION}
         fi
         if [[ ${{ inputs.suite }} == *"timm_models"* ]]; then
-          if [ "${{ inputs.pytorch }}" != "nightly_wheel" ]; then
-            cd ../ && rm -rf vision && git clone --single-branch -b main https://github.com/pytorch/vision.git
-            cd vision && git checkout d23a6e1664d20707c11781299611436e1f0c104f
-            python setup.py bdist_wheel && pip uninstall torchvision -y && pip install dist/*.whl
-          fi
+          cd ../ && rm -rf vision && git clone --single-branch -b main https://github.com/pytorch/vision.git
+          cd vision && git checkout d23a6e1664d20707c11781299611436e1f0c104f
+          python setup.py bdist_wheel && pip uninstall torchvision -y && pip install dist/*.whl
           # install timm without dependencies
           pip install --no-deps git+https://github.com/huggingface/pytorch-image-models@ac3470188b914c5d7a5058a7e28b9eb685a62427
           # install timm dependencies without torch and torchvision
