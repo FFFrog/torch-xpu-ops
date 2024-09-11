@@ -90,7 +90,6 @@ jobs:
           source activate xpu_op_${ZE_AFFINITY_MASK}
           source .github/scripts/env.sh
           pip install mkl-static mkl-include
-          cd ../pytorch
           if [[ ${{ inputs.abi }} == '0' ]]; then
             export _GLIBCXX_USE_CXX11_ABI=0
           else
@@ -105,8 +104,12 @@ jobs:
           else
             # pip install torch torchvision torchaudio --pre --index-url https://download.pytorch.org/whl/nightly/xpu
             pip install torch --index-url https://download.pytorch.org/whl/test/xpu
-            git clone https://github.com/pytorch/vision && cd vision && git checkout d23a6e1664d20707c11781299611436e1f0c104f && python setup.py install && cd ..
+            cd ../ && rm -rf vision && git clone --single-branch -b main https://github.com/pytorch/vision.git
+            cd vision && git checkout d23a6e1664d20707c11781299611436e1f0c104f
+            python setup.py bdist_wheel && pip uninstall torchvision -y && pip install dist/*.whl
+            cd ..
           fi
+          cd ./pytorch
           pip install -r .ci/docker/requirements-ci.txt
       - name: Torch Config
         run: |
