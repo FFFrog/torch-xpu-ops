@@ -51,7 +51,7 @@ endif()
 if(WIN32)
   set(MKL_LIB_NAMES "mkl_intel_lp64" "mkl_intel_thread" "mkl_core" "mkl_sycl")
 else()
-  set(MKL_LIB_NAMES "mkl_intel_lp64" "mkl_gnu_thread" "mkl_core" "mkl_sycl_dft")
+  set(MKL_LIB_NAMES "mkl_intel_ilp64" "mkl_gnu_thread" "mkl_core" "mkl_sycl_dft")
 endif()
 
 foreach(LIB_NAME IN LISTS MKL_LIB_NAMES)
