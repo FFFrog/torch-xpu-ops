@@ -95,6 +95,7 @@ jobs:
       keep_torch_xpu_ops: ${{ github.event_name == 'schedule' && 'false' || inputs.keep_torch_xpu_ops }}
       ut: ${{ github.event_name == 'schedule' && 'op_example,op_extended,op_ut,torch_xpu' || inputs.ut }}
       python: ${{ github.event_name == 'schedule' && '3.10' || inputs.python }}
+      TORCH_XPU_ARCH_LIST: pvc
     outputs:
       TORCH_BRANCH_ID: ${{ steps.pinned.outputs.TORCH_BRANCH_ID }}
       TORCH_COMMIT_ID: ${{ steps.pinned.outputs.TORCH_COMMIT_ID }}
@@ -176,6 +177,7 @@ jobs:
           source activate e2e_ci
           source .github/scripts/env.sh
           cd ../pytorch
+          export TORCH_XPU_ARCH_LIST=pvc
           pip install -r requirements.txt
           export CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
           python setup.py bdist_wheel

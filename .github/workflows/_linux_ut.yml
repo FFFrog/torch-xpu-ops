@@ -45,6 +45,8 @@ jobs:
   Torch-XPU-UT-Tests:
     runs-on: ${{ inputs.runner }} 
     timeout-minutes: 900
+    env:
+      TORCH_XPU_ARCH_LIST: pvc
     steps:
       - name: Checkout torch-xpu-ops
         uses: actions/checkout@v4
@@ -91,6 +93,7 @@ jobs:
           source .github/scripts/env.sh
           pip install mkl-static mkl-include
           cd ../pytorch
+          export TORCH_XPU_ARCH_LIST=pvc
           if [[ ${{ inputs.abi }} == '0' ]]; then
             export _GLIBCXX_USE_CXX11_ABI=0
           else
