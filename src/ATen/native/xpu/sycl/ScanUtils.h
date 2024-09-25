@@ -1433,7 +1433,6 @@ void scan_with_indices(
     int dimension,
     scalar_t init,
     BinaryFunction func) {
-  int ndim = self_.dim();
   auto self = self_.contiguous();
   TORCH_INTERNAL_ASSERT(values.is_contiguous() && indices.is_contiguous());
 
