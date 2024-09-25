@@ -116,6 +116,22 @@ Tensor& XPUNativeFunctions::cumprod_(
   return XPUNativeFunctions::cumprod_out(self, dim, dtype, self);
 }
 
+void XPUNativeFunctions::_cummax_helper(
+    const Tensor& self,
+    Tensor& values,
+    Tensor& indices,
+    int64_t dim) {
+  at::native::xpu::cummax_kernel(self, values, indices, dim);
+}
+
+void XPUNativeFunctions::_cummin_helper(
+    const Tensor& self,
+    Tensor& values,
+    Tensor& indices,
+    int64_t dim) {
+  at::native::xpu::cummin_kernel(self, values, indices, dim);
+}
+
 static ScalarType infer_dtype_from_optional(
     const Tensor& self,
     const optional<ScalarType>& opt_dtype,

@@ -19,6 +19,8 @@ supported:
   - cumprod
   - cumprod.out
   - cumprod_
+  - _cummax_helper
+  - _cummin_helper
   - sub.Tensor
   - sub_.Tensor
   - sub.out

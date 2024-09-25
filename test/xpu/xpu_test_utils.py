@@ -66,6 +66,8 @@ _xpu_computation_op_list = [
     "copy",
     "cumprod",
     "cumsum",
+    "cummax",
+    "cummin",
     "equal",
     "eq",
     "exp",

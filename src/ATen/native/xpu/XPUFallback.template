@@ -168,8 +168,6 @@ TORCH_LIBRARY_IMPL(aten, XPU, m) {
     "_cholesky_solve_helper",
     "_ctc_loss",
     "_ctc_loss_backward",
-    "_cummax_helper",
-    "_cummin_helper",
     "dot",
     "_efficient_attention_forward",
     "_embedding_bag_dense_backward",
