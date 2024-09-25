@@ -177,7 +177,7 @@ jobs:
           source .github/scripts/env.sh
           cd ../pytorch
           pip install -r requirements.txt
-          export CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
+          # export CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
           python setup.py bdist_wheel
           pip install --force-reinstall dist/*.whl
       - name: Show GITHUB_ENV
